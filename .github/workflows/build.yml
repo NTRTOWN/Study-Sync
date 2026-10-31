@@ -24,37 +24,30 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - 
       - name: Setup Android SDK packages
+        shell: bash
         run: |
           echo "Android SDK: $ANDROID_HOME"
-          sdkmanager --version
-          yes | sdkmanager --licenses || true
-          sdkmanager --install \
-            "platforms;android-36-ext1" \
+
+          SDKMANAGER=$(find "$ANDROID_HOME" \
+            -type f -name sdkmanager 2>/dev/null | head -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager was not found"
+            find "$ANDROID_HOME" -maxdepth 5 -type f
+            exit 1
+          fi
+
+          echo "Found sdkmanager: $SDKMANAGER"
+
+          chmod +x "$SDKMANAGER"
+
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --version
+
+          yes | "$SDKMANAGER" \
+            --sdk_root="$ANDROID_HOME" --licenses || true
+
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+            --install "platforms;android-36-ext1" \
             "build-tools;36.0.0"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '9.3.1'
-
-      - name: Create debug signing key
-        run: |
-          keytool -genkeypair -v \
-            -keystore debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA -keysize 2048 -validity 10000
-
-      - name: Build APK
-        run: gradle --no-daemon :app:assembleDebug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: StudySphere-APK
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 7
