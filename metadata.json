@@ -1,0 +1,8 @@
+{
+  "name": "Remix ScholarSync AI",
+  "description": "An all-in-one student platform featuring AI study tools, collaborative workspaces, resource transformation, and global peer connection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
