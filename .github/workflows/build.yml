@@ -29,7 +29,13 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      # 3. Locate Android SDK tools
+      # 3. Setup Gradle (This installs the gradle command-line tool)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.5'
+
+      # 4. Locate Android SDK tools
       - name: Locate Android SDK
         shell: bash
         run: |
@@ -55,7 +61,7 @@ jobs:
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           echo "Found: $SDKMANAGER"
 
-      # 4. Install required Android packages
+      # 5. Install required Android packages
       - name: Install Android SDK
         shell: bash
         run: |
@@ -68,29 +74,19 @@ jobs:
           yes | "$SDKMANAGER" \
             --sdk_root="$ANDROID_HOME" --licenses || true
 
-      # 5. Automatically Find Project, Generate Key, and Build APK
-      - name: Find Project and Build APK
+      # 6. Generate missing gradlew, create keystore, and build APK
+      - name: Generate Wrapper and Build APK
         shell: bash
         run: |
-          echo "Searching for gradlew in the repository..."
-          GRADLEW_PATH=$(find . -name "gradlew" -type f -print -quit)
+          echo "Generating missing Gradle wrapper..."
+          gradle wrapper --gradle-version 8.5
+
+          # Grant execution permission to the newly generated gradlew
+          chmod +x gradlew
           
-          if [ -z "$GRADLEW_PATH" ]; then
-            echo "Error: gradlew wrapper not found anywhere in the repository!"
-            echo "Repository file tree:"
-            ls -R
-            exit 1
-          fi
-          
-          PROJECT_DIR=$(dirname "$GRADLEW_PATH")
-          echo "Found Android project at: $PROJECT_DIR"
-          
-          # Grant execution permission
-          chmod +x "$GRADLEW_PATH"
-          
-          # Create debug signing key inside the project directory
+          # Create debug signing key
           keytool -genkeypair -v \
-            -keystore "$PROJECT_DIR/debug.keystore" \
+            -keystore debug.keystore \
             -storepass android \
             -alias androiddebugkey \
             -keypass android \
@@ -99,14 +95,13 @@ jobs:
             -keysize 2048 \
             -validity 10000 || true
 
-          # Move into project folder and build debug APK
-          cd "$PROJECT_DIR"
+          # Build debug APK
           ./gradlew assembleDebug --stacktrace
 
-      # 6. Upload APK Artifact (Auto-locates the built APK)
+      # 7. Upload APK Artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: studysphere-debug-apk
-          path: '**/build/outputs/apk/debug/app-debug.apk'
+          path: 'app/build/outputs/apk/debug/app-debug.apk'
           if-no-files-found: error
