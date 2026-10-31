@@ -24,19 +24,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
+      - name: Setup Android SDK packages
         run: |
-          sdkmanager "platforms;android-36-ext1" "build-tools;36.0.0"
+          echo "Android SDK: $ANDROID_HOME"
+          sdkmanager --version
+          yes | sdkmanager --licenses || true
+          sdkmanager --install \
+            "platforms;android-36-ext1" \
+            "build-tools;36.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
 
-      - name: Create debug key
+      - name: Create debug signing key
         run: |
           keytool -genkeypair -v \
             -keystore debug.keystore \
@@ -46,10 +48,10 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" \
             -keyalg RSA -keysize 2048 -validity 10000
 
-      - name: Build Android APK
+      - name: Build APK
         run: gradle --no-daemon :app:assembleDebug
 
-      - name: Save APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: StudySphere-APK
