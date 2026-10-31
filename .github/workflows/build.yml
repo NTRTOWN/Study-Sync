@@ -12,42 +12,90 @@ permissions:
 
 jobs:
   build:
+    name: Build Android App
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Download project files
       - name: Checkout project
         uses: actions/checkout@v4
 
+      # 2. Install Java
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - 
-      - name: Setup Android SDK packages
+      # 3. Locate Android SDK tools
+      - name: Locate Android SDK
         shell: bash
         run: |
-          echo "Android SDK: $ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
-          SDKMANAGER=$(find "$ANDROID_HOME" \
-            -type f -name sdkmanager 2>/dev/null | head -n 1)
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager was not found"
-            find "$ANDROID_HOME" -maxdepth 5 -type f
+          if [ ! -x "$SDKMANAGER" ]; then
+            for candidate in "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager; do
+              if [ -x "$candidate" ]; then
+                SDKMANAGER="$candidate"
+                break
+              fi
+            done
+          fi
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "Android SDK manager not found"
+            find "$ANDROID_HOME" -maxdepth 6 -name sdkmanager
             exit 1
           fi
 
-          echo "Found sdkmanager: $SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "Found: $SDKMANAGER"
 
-          chmod +x "$SDKMANAGER"
-
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --version
+      # 4. Install required Android packages
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+            --install \
+            "platforms;android-36-ext1" \
+            "build-tools;36.0.0" \
+            "platform-tools"
 
           yes | "$SDKMANAGER" \
             --sdk_root="$ANDROID_HOME" --licenses || true
 
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
-            --install "platforms;android-36-ext1" \
-            "build-tools;36.0.0"
+      # 5. Setup Gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      # 6. Create debug signing key
+      - name: Create debug signing key
+        shell: bash
+        run: |
+          keytool -genkeypair -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+
+      # 7. Build StudySphere
+      - name: Build StudySphere APK
+        run: |
+          gradle --no-daemon :app:assembleDebug
+
+      # 8. Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudySphere-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
